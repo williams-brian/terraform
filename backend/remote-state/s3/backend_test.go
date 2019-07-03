@@ -82,6 +82,41 @@ func TestBackendConfig_invalidKey(t *testing.T) {
 	}
 }
 
+func TestBackendConfig_invalidSSECustomerKey(t *testing.T) {
+	testACC(t)
+	cfg := hcl2shim.HCL2ValueFromConfigValue(map[string]interface{}{
+		"region":           "us-west-1",
+		"bucket":           "tf-test",
+		"encrypt":          true,
+		"key":              "state",
+		"dynamodb_table":   "dynamoTable",
+		"sse_customer_key": "key",
+	})
+
+	_, diags := New().PrepareConfig(cfg)
+	if !diags.HasErrors() {
+		t.Fatal("expected error for invalid sse_customer_key length")
+	}
+}
+
+func TestBackendConfig_conflictingEncryptionSchema(t *testing.T) {
+	testACC(t)
+	cfg := hcl2shim.HCL2ValueFromConfigValue(map[string]interface{}{
+		"region":           "us-west-1",
+		"bucket":           "tf-test",
+		"key":              "state",
+		"encrypt":          true,
+		"dynamodb_table":   "dynamoTable",
+		"sse_customer_key": "aecoshaF5yoo3vazaz8ukooyireu6aet",
+		"kms_key_id":       "arn:aws:kms:us-west-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab",
+	})
+
+	diags := New().Configure(cfg)
+	if !diags.HasErrors() {
+		t.Fatal("expected error for simultaneous usage of kms_key_id and sse_customer_key")
+	}
+}
+
 func TestBackend(t *testing.T) {
 	testACC(t)
 
@@ -127,6 +162,23 @@ func TestBackendLocked(t *testing.T) {
 
 	backend.TestBackendStateLocks(t, b1, b2)
 	backend.TestBackendStateForceUnlock(t, b1, b2)
+}
+
+func TestBackendSSECustomerKey(t *testing.T) {
+	testACC(t)
+	bucketName := fmt.Sprintf("terraform-remote-s3-test-%x", time.Now().Unix())
+
+	b := backend.TestBackendConfig(t, New(), backend.TestWrapConfig(map[string]interface{}{
+		"bucket":           bucketName,
+		"encrypt":          true,
+		"key":              "test-SSE-C",
+		"sse_customer_key": "aiShiem0kahlaefe6guusheigh0aiXei",
+	})).(*Backend)
+
+	createS3Bucket(t, b.s3Client, bucketName)
+	defer deleteS3Bucket(t, b.s3Client, bucketName)
+
+	backend.TestBackendStates(t, b)
 }
 
 // add some extra junk in S3 to try and confuse the env listing.

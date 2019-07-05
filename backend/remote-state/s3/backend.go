@@ -2,7 +2,9 @@ package s3
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -188,12 +190,12 @@ func New() backend.Backend {
 			"sse_customer_key": {
 				Type:        schema.TypeString,
 				Optional:    true,
-				Description: "The encryption key to use for server-side encryption with customer-provided keys (SSE-C). Must be 32 characters.",
+				Description: "The base64-encoded encryption key to use for server-side encryption with customer-provided keys (SSE-C).",
 				DefaultFunc: schema.EnvDefaultFunc("AWS_SSE_CUSTOMER_KEY", ""),
 				ValidateFunc: func(v interface{}, s string) ([]string, []error) {
 					key := v.(string)
-					if key != "" && len(key) != 32 {
-						return nil, []error{errors.New("sse_customer_key must be 32 characters in length")}
+					if key != "" && len(key) != 44 {
+						return nil, []error{errors.New("sse_customer_key must be 44 characters in length (256 bits, base64 encoded)")}
 					}
 					return nil, nil
 				},
@@ -272,7 +274,7 @@ type Backend struct {
 	bucketName            string
 	keyName               string
 	serverSideEncryption  bool
-	customerEncryptionKey string
+	customerEncryptionKey []byte
 	acl                   string
 	kmsKeyID              string
 	ddbTable              string
@@ -297,12 +299,20 @@ func (b *Backend) configure(ctx context.Context) error {
 	b.keyName = data.Get("key").(string)
 	b.acl = data.Get("acl").(string)
 	b.workspaceKeyPrefix = data.Get("workspace_key_prefix").(string)
-
 	b.serverSideEncryption = data.Get("encrypt").(bool)
-	b.customerEncryptionKey = data.Get("sse_customer_key").(string)
 	b.kmsKeyID = data.Get("kms_key_id").(string)
-	if b.customerEncryptionKey != "" && b.kmsKeyID != "" {
-		return errors.New(encryptionKeyConflictError)
+
+	customerKeyString := data.Get("sse_customer_key").(string)
+	if customerKeyString != "" {
+		if b.kmsKeyID != "" {
+			return errors.New(encryptionKeyConflictError)
+		}
+
+		var err error
+		b.customerEncryptionKey, err = base64.StdEncoding.DecodeString(customerKeyString)
+		if err != nil {
+			return fmt.Errorf("Failed to decode sse_customer_key: %s", err.Error())
+		}
 	}
 
 	b.ddbTable = data.Get("dynamodb_table").(string)

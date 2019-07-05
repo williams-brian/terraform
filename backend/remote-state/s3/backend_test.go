@@ -82,7 +82,7 @@ func TestBackendConfig_invalidKey(t *testing.T) {
 	}
 }
 
-func TestBackendConfig_invalidSSECustomerKey(t *testing.T) {
+func TestBackendConfig_invalidSSECustomerKeyLength(t *testing.T) {
 	testACC(t)
 	cfg := hcl2shim.HCL2ValueFromConfigValue(map[string]interface{}{
 		"region":           "us-west-1",
@@ -99,6 +99,23 @@ func TestBackendConfig_invalidSSECustomerKey(t *testing.T) {
 	}
 }
 
+func TestBackendConfig_invalidSSECustomerKeyEncoding(t *testing.T) {
+	testACC(t)
+	cfg := hcl2shim.HCL2ValueFromConfigValue(map[string]interface{}{
+		"region":           "us-west-1",
+		"bucket":           "tf-test",
+		"encrypt":          true,
+		"key":              "state",
+		"dynamodb_table":   "dynamoTable",
+		"sse_customer_key": "====CT70aTYB2JGff7AjQtwbiLkwH4npICay1PWtmdka",
+	})
+
+	diags := New().Configure(cfg)
+	if !diags.HasErrors() {
+		t.Fatal("expected error for failing to decode sse_customer_key")
+	}
+}
+
 func TestBackendConfig_conflictingEncryptionSchema(t *testing.T) {
 	testACC(t)
 	cfg := hcl2shim.HCL2ValueFromConfigValue(map[string]interface{}{
@@ -107,7 +124,7 @@ func TestBackendConfig_conflictingEncryptionSchema(t *testing.T) {
 		"key":              "state",
 		"encrypt":          true,
 		"dynamodb_table":   "dynamoTable",
-		"sse_customer_key": "aecoshaF5yoo3vazaz8ukooyireu6aet",
+		"sse_customer_key": "1hwbcNPGWL+AwDiyGmRidTWAEVmCWMKbEHA+Es8w75o=",
 		"kms_key_id":       "arn:aws:kms:us-west-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab",
 	})
 
@@ -172,7 +189,7 @@ func TestBackendSSECustomerKey(t *testing.T) {
 		"bucket":           bucketName,
 		"encrypt":          true,
 		"key":              "test-SSE-C",
-		"sse_customer_key": "aiShiem0kahlaefe6guusheigh0aiXei",
+		"sse_customer_key": "4Dm1n4rphuFgawxuzY/bEfvLf6rYK0gIjfaDSLlfXNk=",
 	})).(*Backend)
 
 	createS3Bucket(t, b.s3Client, bucketName)

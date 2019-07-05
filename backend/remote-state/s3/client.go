@@ -35,7 +35,7 @@ type RemoteClient struct {
 	bucketName            string
 	path                  string
 	serverSideEncryption  bool
-	customerEncryptionKey string
+	customerEncryptionKey []byte
 	acl                   string
 	kmsKeyID              string
 	ddbTable              string
@@ -106,8 +106,8 @@ func (c *RemoteClient) get() (*remote.Payload, error) {
 		Key:    &c.path,
 	}
 
-	if c.serverSideEncryption && c.customerEncryptionKey != "" {
-		input.SetSSECustomerKey(c.customerEncryptionKey)
+	if c.serverSideEncryption && c.customerEncryptionKey != nil {
+		input.SetSSECustomerKey(string(c.customerEncryptionKey))
 		input.SetSSECustomerAlgorithm(s3EncryptionAlgorithm)
 		input.SetSSECustomerKeyMD5(c.getSSECustomerKeyMD5())
 	}
@@ -163,8 +163,8 @@ func (c *RemoteClient) Put(data []byte) error {
 		if c.kmsKeyID != "" {
 			i.SSEKMSKeyId = &c.kmsKeyID
 			i.ServerSideEncryption = aws.String("aws:kms")
-		} else if c.customerEncryptionKey != "" {
-			i.SetSSECustomerKey(c.customerEncryptionKey)
+		} else if c.customerEncryptionKey != nil {
+			i.SetSSECustomerKey(string(c.customerEncryptionKey))
 			i.SetSSECustomerAlgorithm(s3EncryptionAlgorithm)
 			i.SetSSECustomerKeyMD5(c.getSSECustomerKeyMD5())
 		} else {
@@ -399,7 +399,7 @@ func (c *RemoteClient) lockPath() string {
 }
 
 func (c *RemoteClient) getSSECustomerKeyMD5() string {
-	b := md5.Sum([]byte(c.customerEncryptionKey))
+	b := md5.Sum(c.customerEncryptionKey)
 	return base64.StdEncoding.EncodeToString(b[:])
 }
 
